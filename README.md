@@ -94,10 +94,54 @@ promise.then(onFulfilled, onRejected)
 promise2 = promise1.then(onFulfilled, onRejected);
 ```
 
-- 2.2.7.1. 若 `onFulfilled` 或 `onRejected` 返回一个值 `x`，则运行 promise 解析程序 `[[Resolve]](promise2, x)`。
+- 2.2.7.1. 若 `onFulfilled` 或 `onRejected` 返回一个值 `x`，则运执行 promise 解析过程 `[[Resolve]](promise2, x)`。
 
 - 2.2.7.2. 若 `onFulfilled` 或 `onRejected` 抛出一个异常 `e`，则必须以 `e` 为原因拒绝 `promise2`。
 
 - 2.2.7.3. 若 `onFulfilled` 不是函数且 `promise1` 被兑现，则必须以相同于 `promise1` 的值兑现 `promise2`。
 
 - 2.2.7.4. 若 `onRejected` 不是函数且 `promise1` 被拒绝，则必须以相同于 `promise1` 的原因拒绝 `promise2`。
+
+### promise 解析过程
+
+**promise 解析过程**是个以一个 promise 和一个值作为输入的抽象操作，我们将它表示为 `[[Resolve]](promise, x)`。若 `x` 是一个 thenable，则在 `x` 的行为至少有点像个 promise 的假设下，这个操作尝试使 `promise` 采用 `x` 的状态。否则，它以值 `x` 兑现 `promise`。
+
+这样对 thenable 的处理让 promise 的诸多实现可以互操作，只要它们对外暴露一个遵循 Promises/A+ 的 `then` 方法。这样的处理也可以让 Promises/A+ 的实现去“同化（assimilate）”不遵循但有合理 `then` 方法的实现。
+
+要执行 `[[Resolve]](promise, x)`，就执行以下步骤：
+
+2.3.1. 若 `promise` 和 `x` 引用同一个对象，则以一个 `TypeError` 为原因拒绝 `promise`。
+
+2.3.2. 若 `x` 是一个 promise，则采用它的状态[3.4]：
+
+- 2.3.2.1. 若 `x` 处于 pending 状态，则 `promise` 在 `x` 被兑现或拒绝之前，必须保持 pending 状态。
+
+- 2.3.2.2. 若 / 当 `x` 被兑现时，则以相同的值兑现 `promise`。
+
+- 2.3.2.3. 若 / 当 `x` 被拒绝时，则以相同的原因拒绝 `promise`。
+
+2.3.3. 否则，若 `x` 是个对象或函数，则
+
+- 2.3.3.1. 令 `then` 为 `x.then`。[3.5]
+
+- 2.3.3.2. 若检索属性 `x.then` 导致抛出了一个异常 `e`，则以 `e` 作为原因拒绝 `promise`。
+
+- 2.3.3.3. 若 `then` 是个函数，则以 `x` 为 `this` 调用它，第一个参数 `resolvePromise`，第二个参数 `rejectPromise`，其中：
+
+  - 2.3.3.3.1. 若 / 当 `resolvePromise` 以一个值 `y` 调用，则执行 `[[Resolve]](promise, y)`。
+
+  - 2.3.3.3.2. 若 / 当 `rejectPromise` 以一个原因 `r` 调用，则以 `r` 为原因拒绝 `promise`。
+
+  - 2.3.3.3.3. 若 `resolvePromise` 和 `rejectPromise` 都被调用，或对同一参数进行了多次调用，则第一次调用优先，并忽略后面其它的调用。
+
+  - 2.3.3.3.4. 若调用 `then` 时抛出了一个异常 `e`，
+
+    - 2.3.3.3.4.1. 若 `resolvePromise` 或 `rejectPromise` 已被调用，则忽略它。
+
+    - 2.3.3.3.4.2. 否则，以 `e` 为原因拒绝 `promise`。
+
+- 2.3.3.4. 若 `then` 不函数，则以 `x` 兑现 `promise`。
+
+2.3.4. 若 `x` 不是对象或函数，则以 `x` 兑现 `promise`。
+
+若 promise 以一个参与循环 thenable 链的 thenable 解决，则 `[[Resolve]](promise, thenable)` 的递归性质最终会导致 `[[Resolve]](promise, thenable)` 被再次调用，采用上面的算法会导致无限递归。检测这样的递归并将带有有用信息的 `TypeError` 作为原因拒绝 `promise`，鼓励这样实现，但这不是必须的。[3.6]
